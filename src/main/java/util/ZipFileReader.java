@@ -4,23 +4,19 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.Enumeration;
 import java.util.List;
-import java.util.TimeZone;
 import java.util.zip.ZipEntry;
-import java.util.zip.ZipException;
 import java.util.zip.ZipFile;
 
 import org.simpleflatmapper.csv.CsvParser;
 
-import model.CalendarModel;
+import model.*;
 
 public class ZipFileReader {
 
-	private static int MAX_END_DATE;
+	private static int maxEndDate;
 
 	public static List<String> getFileName(String path) {
 		List<String> result = new ArrayList<String>();
@@ -39,42 +35,51 @@ public class ZipFileReader {
 		return result;
 	}
 
-	public static void getZipFileContent(File zipFile, String readFileName) throws ZipException, IOException {  
-		ZipFile zip = new ZipFile(zipFile);  
+	public static int getMaxDate(File zipFile) throws IOException {
+		ZipFile zip = new ZipFile(zipFile);
 		@SuppressWarnings("unchecked")
-		Enumeration<ZipEntry> entries = (Enumeration<ZipEntry>) zip.entries();  
+		Enumeration<ZipEntry> entries = (Enumeration<ZipEntry>) zip.entries();
+		maxEndDate = 0;
 
-		ZipEntry ze;  
-		while (entries.hasMoreElements()) {  
-			ze = entries.nextElement();  
-			MAX_END_DATE = 0;
-			if (ze.getName().equals(readFileName)) {  
+		ZipEntry ze;
+		while (entries.hasMoreElements()) {
+			ze = entries.nextElement();
+
+			if (ze.getName().equals("calendar.txt")) {
 				InputStream is = zip.getInputStream(ze);
 				CsvParser.mapTo(CalendarModel.class)
-				.forEach(new InputStreamReader(is)
-						, r -> {
-							int endDate = r.getEnd_date();
-							if(endDate > MAX_END_DATE) MAX_END_DATE = endDate;
-						});
-				int currentDate = getCurrentDate();
-				if(MAX_END_DATE - currentDate <= 7) 
-					SNSNotification.sendSNSNotification(zipFile.getName(), MAX_END_DATE);
+						.forEach(new InputStreamReader(is)
+								, r -> {
+									if (r.getEnd_date() > maxEndDate) {
+										maxEndDate = r.getEnd_date();
+									}
+								});
 			}
-		}  
-		zip.close();    
-	} 
+			else if (ze.getName().equals("calendar_dates.txt")) {
+				InputStream is = zip.getInputStream(ze);
+				CsvParser.mapTo(CalendarDateModel.class)
+						.forEach(new InputStreamReader(is)
+								, r -> {
+									if (r.getDate() > maxEndDate) {
+										maxEndDate = r.getDate();
+									}
+								});
 
+			}
+		}
+		zip.close();
+		if (maxEndDate == 0){
+			throw new IllegalStateException("Did not find an end date.");
+		}
+		return maxEndDate;
+	}
 	public static void deleteFile(File file) {
-		for(File childFile : file.listFiles()){
-			if(childFile.getPath().matches(".*\\d{10,}.*")) childFile.delete();
+		if (file.listFiles() != null){
+			for(File childFile : file.listFiles()){
+				if(childFile.getPath().matches(".*\\d{10,}.*")) childFile.delete();
+			}
 		}
 	}
 	
-	public static int getCurrentDate() {
-		Date date = new Date();
-		SimpleDateFormat dateFormat = new SimpleDateFormat("yyyyMMdd");
-		dateFormat.setTimeZone(TimeZone.getTimeZone("America/New York"));
-		int currentDate = Integer.valueOf(dateFormat.format(date));	
-		return currentDate;
-	}
+
 }

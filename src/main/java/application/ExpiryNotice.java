@@ -2,7 +2,6 @@ package application;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.List;
 
 import com.amazonaws.services.lambda.runtime.Context;
@@ -10,7 +9,9 @@ import com.amazonaws.services.lambda.runtime.LambdaLogger;
 import com.amazonaws.services.lambda.runtime.RequestHandler;
 
 import util.S3Bucket;
+import util.SNSNotification;
 import util.ZipFileReader;
+import util.Date;
 
 public class ExpiryNotice implements RequestHandler<Object, String> {
 
@@ -36,8 +37,8 @@ public class ExpiryNotice implements RequestHandler<Object, String> {
 		return "done";
 	}
 	
-	public static void expiryDateCheck() {
-        List<String> fileNames = new ArrayList<String>();
+	private static void expiryDateCheck() {
+        List<String> fileNames;
 		fileNames = ZipFileReader.getFileName(TMP_PATH);
 		if (fileNames.size() == 0){
 			System.err.println("No files found in path " + TMP_PATH.toString());
@@ -46,13 +47,18 @@ public class ExpiryNotice implements RequestHandler<Object, String> {
 
 		for(String fileName : fileNames){
 			if(fileName.endsWith(".zip")){
+				int maxEndDate =-1;
 				File file = new File(TMP_PATH + fileName);
 				try {
-					ZipFileReader.getZipFileContent(file, "calendar.txt");
-				} catch (IOException e) {
+					maxEndDate = ZipFileReader.getMaxDate(file);
+				} catch (Exception e) {
 					e.printStackTrace();
 				}
+
+				if(maxEndDate - Date.getCurrentDate() <= 7)
+					SNSNotification.sendSNSNotification(fileName, maxEndDate);
 			}
 		}
+		}
 	}
-}
+
